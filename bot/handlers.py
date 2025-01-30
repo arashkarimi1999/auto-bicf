@@ -36,7 +36,6 @@ def generate_time_slots(hours: int):
         })
 
         if start_time.minute == 30:
-            time(start_time.hour + 1, start_time)
             start_time = time(start_time.hour + 1, start_time.minute - 30)
         else:
             start_time = time(start_time.hour, start_time.minute + 30)
