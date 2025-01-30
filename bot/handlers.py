@@ -10,6 +10,7 @@ from telegram.ext import (
 )
 
 from bot.logger import logger
+from bot.utils import get_working_day
 
 
 GET_NAME, GET_EMAIL, GET_CODICE, GET_HOUR, GET_TIME_SLOT = range(5)
@@ -59,9 +60,21 @@ async def create_reserve(update: Update, context: ContextTypes.DEFAULT_TYPE):
     If user data isn't already stored, request the user's details.
     """
     if context.user_data:
+        context.user_data["request"] = dict()
+        (
+            context.user_data["request"]["date"],
+            context.user_data["request"]["max_time"],
+        ) = get_working_day()
+        await context.bot.send_message(
+            chat_id=update.message.chat_id,
+            text=f"Your reservation is goin to be for {
+                context.user_data["request"]["date"]
+            }."
+        )
         await update.message.reply_text(
             "Enter the number of hours you want to reserve.\n"
-            "(Only numeric values are allowed, minimum=1, maximum=14)."
+            "(Only numeric values are allowed, minimum=1, "
+            f"maximum={context.user_data["request"]["max_time"]})."
         )
         return GET_HOUR
     else:
@@ -104,10 +117,26 @@ async def get_codice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     context.user_data["codice"] = update.message.text.strip()
     context.user_data["chat_id"] = update.message.chat_id
+    context.user_data["request"] = dict()
+    (
+        context.user_data["request"]["date"],
+        context.user_data["request"]["max_time"],
+    ) = get_working_day()
+
     await context.bot.send_message(
         chat_id=update.message.chat_id,
-        text="Thank you.\nNow enter the number of hours you want to reserve.\n"
-        "(Only numeric values are allowed, minimum=1, maximum=14)."
+        text="Thank you."
+    )
+    await context.bot.send_message(
+        chat_id=update.message.chat_id,
+        text=f"Your reservation is going to be for"
+        f"{context.user_data["request"]["date"]}."
+    )
+    await context.bot.send_message(
+        chat_id=update.message.chat_id,
+        text="Now enter the number of hours you want to reserve.\n"
+        "(Only numeric values are allowed, minimum=1, "
+        f"maximum={context.user_data["request"]["max_time"]})."
     )
     return GET_HOUR
 
@@ -118,10 +147,12 @@ async def get_hour(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         hours = int(update.message.text.strip())
     except ValueError:
-        await update.message.reply_text("Invalid input. Please enter a numeric value.")
+        await update.message.reply_text(
+            "Invalid input. Please enter a numeric value."
+        )
         return GET_HOUR
 
-    if 1 <= hours <= 14:
+    if 1 <= hours <= context.user_data["request"]["max_time"]:
         context.user_data["request"] = {"hour": hours}
 
         time_slots = generate_time_slots(hours)
@@ -135,7 +166,10 @@ async def get_hour(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return GET_TIME_SLOT
     else:
-        await update.message.reply_text("Please enter a number between 1 and 14.")
+        await update.message.reply_text(
+            f"Please enter a number between 1 and "
+            f"{context.user_data["request"]["max_time"]}."
+        )
         return GET_HOUR
 
 async def get_time_slot(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -148,8 +182,10 @@ async def get_time_slot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for slot in time_slots:
         if f"{slot['start']} - {slot['end']}" == selected_slot:
             context.user_data["request"]["time_slot"] = slot
+            print(context.user_data)
             await update.message.reply_text(
-                f"Your reservation is confirmed for {slot['start']} - {slot['end']}."
+                f"Your reservation is confirmed for {slot['start']} - "
+                f"{slot['end']} {context.user_data["request"]["date"]}."
             )
             return ConversationHandler.END
 
